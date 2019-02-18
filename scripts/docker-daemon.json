@@ -1,0 +1,4 @@
+{
+    "data-root": "/media/jeromes/storage/docker",
+    "storage-driver": "overlay2"
+}

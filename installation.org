@@ -1,0 +1,200 @@
+
+* machine initial setup
+user name is "jerome"
+machine name is "jeromes"
+
+** partition and install OS
+*** partition
+120gb
+done via USB boot drive
+*** OS
+ubuntu 18.04.1
+default installation
+~9gb
+sudo apt install net-tools -y
+**basic OS apps
+chrome
+bookmarks bar: https://gitpod.io/workspaces/ (user lacma2011 github)
+taskbar auto-hide
+favorite: chrome
+sudo apt install vlc browser-plugin-vlc -y
+** emacs
+-- installation
+   sudo apt-get install emacs25 -y
+   includes org mode
+   custom options -> theme -> tsdh-dark
+** netbeans
+-- installation
+   jdk
+       maybe install jre:  "sudo apt install default-jre"
+       download 64-bit jdk8. Ex. jdk-8u191-linux-x64.tar.gz
+       move it to /usr/lib/(etc...)
+       in netbeans install, specify that path when asked for location
+   netbeans complete (w/ c++ and java)
+-- plugins / setup
+   darkmetal theme from dark look&feel
+** partition
+created storage partition of 240gigs in gparted. Name it "storage"
+run sudo scripts/mount-storage.sh  to set mount point at: /media/jeromes/storage
+note that barrier=0 is option for docker to be faster with mysql
+mount it and set permissions:
+    mount /media/jeromes/storage
+    sudo chown -R jerome:jerome /media/jeromes/storage
+
+** ssh key
+do the following:
+  ssh-keygen -t rsa -b 4096 -C "email@gmail.com"
+  -- asks for password and other things (default)
+** add key to ssh agent
+do the following:
+  eval "$(ssh-agent -s)"
+  ssh-add ~/.ssh/id_rsa
+add key to github:
+  sudo apt-get install xclip -y
+  xclip -sel clip < ~/.ssh/id_rsa.pub   *copy public key to clipboard
+  -- paste it in github ssh key config
+
+
+** folders
+mkdir ~/code  for repos
+mkdir ~/Desktop/setup   for this file and other notes or scripts on setting up machine
+
+* more setup
+sudo apt install git -y
+git config --global user.email "email@gmail.com"
+git config --global user.name "Jerome Bordallo"
+
+** emacs setup
+
+** possible hibernate/suspend problem...
+nvidia drivers may mess up machine coming out of suspend, because programs are
+closed if you close the lid (not clicking "suspend" button in ubuntu)
+    edit file /etc/default/grub
+        modify this line:
+            GRUB_CMDLINE_LINUX="nouveau.modeset=0"
+    sudo update-grub
+
+** virtualbox and vagrant for laravel homestead
+run sudo scripts/virtualbox.sh
+run scripts/virtualbox-keys1.sh  (not sudo)
+  -- remember password and restart machine
+run scripts/virtualbox-keys2.sh (not sudo)
+run scripts/vagrant.sh  (not sudo)
+
+** laravel homestead
+follow steps to set up vagrant:
+    https://laravel.com/docs/5.7/homestead#first-steps
+run vagrant!
+   cd ~/Homestead
+   vagrant up
+add to /etc/hosts file
+   (IP in vagrant)    homestead.test
+
+** docker & docker compose setup...
+   run scripts/docker.sh
+to move image storage:
+   sudo cp scripts/docker-daemon.json /etc/docker/daemon.json
+   sudo systemctl stop docker
+   sudo systemctl start docker
+   docker run hello-world #test "hello world" again
+   sudo rm /var/lib/docker # old folders
+
+** chrome/karma with docker...
+follow steps in https://github.com/eirslett/chrome-karma-docker
+basically they are:
+    cd ~/code
+    git clone https://github.com/eirslett/chrome-karma-docker.git
+    cd chrome-karma-docker
+    #remove the volumes in docker-compose.yaml, they will bug
+    docker-compose build
+run tests:
+    docker-compose run --rm dev yarn test
+to run the build:
+    docker-compose run --rm dev yarn build
+    
+** wow logger (fish)...
+    cd ~/code
+    git clone https://github.com/lacma2011/wowlogger.git
+    # add the entries for folders, sites, databases to vagrant's Homestead.yaml:
+
+folders:
+    - map: ~/code/wowlogger
+      to: /home/vagrant/fish
+
+sites:
+    - map: fisherman.test
+      to: /home/vagrant/fish/public
+
+databases:
+    - fish
+
+    #end Homestead.yaml
+
+add IP for fisherman.test to /etc/hosts
+
+    # rebuild vagrant
+    vagrant reload --provision
+    
+    # add the .env (without the key)
+    # make sure it uses fish.test for site location, and 'fish' for datbase
+
+    # inside VM, composer install, etc
+    vagrant up #if not up already
+    vagrant ssh
+    # in vm
+    cd fish
+    mkdir storage/framework/cache/data
+    composer install
+    php artisan key:generate
+    php artisan migrate --seed
+    wget -O phpunit https://phar.phpunit.de/phpunit-7.phar
+    chmod +x phpunit
+    phpunit  #run tests
+
+if .env config is all fine, including google accounts, then tests will pass!
+check http://fisherman.test
+
+    # because lacma2011 repo is not updated???
+    composer update
+    phpunit
+
+** wowlogger in the docker version (~/code/docker-lamp)
+   go to docker-lamp project:
+       cd ~/code/docker-lamp
+       # check my github for docker-lamp as well
+   get source code into docker project:
+       cd www/html
+       git clone https://github.com/lacma2011/wowlogger.git
+           --will put source into www/html/wowlogger/
+   do env settings
+       copy a good .env to www/html/wowlogger
+       update .env with good credentials. Ex.:
+           APP_URL=https://fisherman.docker
+	   APP_PORT=8001
+           DB_HOST=db
+           DB_USERNAME=user
+           DB_PASSWORD=test
+   add "fisherman.docker" record to /etc/hosts
+   create config file in apache/sites-enabled
+   create db 
+       login to workspace container
+       login to mysql as root and do commands:
+           CREATE DATABASE fish
+           GRANT ALL PRIVILEGES ON fish.* TO 'user'@'%'
+   in workspace container, follow previous steps to setup laravel project:
+       cd /var/www/html/wowlogger
+       mkdir storage/framework/cache/data
+       composer install
+       php artisan key:generate
+       php artisan migrate --seed
+       wget -O phpunit https://phar.phpunit.de/phpunit-7.phar
+       chmod +x phpunit
+       phpunit  #run tests
+       # because lacma2011 repo is not updated???
+       composer update
+       phpunit
+   login to http://fisherman.docker:8001 (or port 80)
+
+   TODO: have to make container user be allowed to have permissions for folders in storage.
+        dirty fix:  sudo find storage -type d  | xargs sudo chmod 777
+
